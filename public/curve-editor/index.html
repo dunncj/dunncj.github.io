@@ -48,7 +48,7 @@
   <button id="copy">Copy CSV</button>
 </header>
 <main><svg id="chart"></svg><div id="tip"></div></main>
-<footer>Drag points to shape demand over the event. Click to add a point (on the line to keep the shape), drag to move one, right-click to remove one. The dashed blue line is what the CSV will contain. Copy CSV, then paste it into the event in Garage.</footer>
+<footer>Drag points to shape demand over the event. Click the curve to add a point on it, drag points to reshape, right-click a point to remove it. The dashed blue line is what the CSV will contain. Copy CSV, then paste it into the event in Garage.</footer>
 <script>
 // Demand curve editor for Garage Planning. Opened from Garage with the event window in the URL:
 //   #start=2026-10-04T18:00&end=2026-10-04T23:00&tz=US/Central[&field=adder&base=0&peak=300&pts=0:0,0.5:1,1:0]
@@ -201,6 +201,7 @@ function showTip(clientX, clientY, f) {
 
 // Points are grabbed (and right-click removed) within GRAB_PX of the pointer, not just on the dot.
 const GRAB_PX = 18;
+const CURVE_HIT_PX = 16; // clicks this close to the curve add a point on it
 let hover = null;
 let dragged = false;
 function nearestPoint(e) {
@@ -254,8 +255,8 @@ svg.addEventListener('pointerup', (e) => {
 });
 svg.addEventListener('pointerleave', () => { if (drag == null) { tip.style.display = 'none'; setHover(null); } });
 const removePoint = (i) => { if (i > 0 && i < pts.length - 1) { pts.splice(i, 1); hover = null; draw(); } };
-// Left click on empty space adds a point there (it slots in by time); on or near the line it
-// lands on the line, so the shape doesn't change.
+// A left click on (or near) the curve adds a point on it, which can then be dragged; clicks
+// elsewhere do nothing.
 svg.addEventListener('click', (e) => {
   if (e.button !== 0) return;
   if (dragged) { dragged = false; return; }
