@@ -1,3 +1,0 @@
-Demand curve editor: a build of SVG Path Editor (https://github.com/Yqnn/svg-path-editor, Apache-2.0)
-with changes: default demand-curve spline, 0-100 guide box with From/To/Peak/Base labels,
-URL #P= paths load without a confirm dialog, auto-zoom fits the guide box, title and help text.
