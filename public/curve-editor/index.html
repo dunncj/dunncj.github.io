@@ -19,6 +19,8 @@
   #copy { background: var(--accent); color: #111; font-weight: 700; font-size: 14px; padding: 8px 16px; min-width: 110px; }
   .spacer { flex: 1; }
   #window { color: var(--muted); }
+  #action { min-width: 210px; padding: 3px 8px; border-radius: 4px; background: #1b1b1b; border: 1px solid #444; }
+  #action.active { border-color: var(--accent); color: var(--accent); }
   main { flex: 1; min-height: 0; position: relative; }
   svg { width: 100%; height: 100%; display: block; user-select: none; touch-action: none; cursor: default; }
   .gridline { stroke: var(--grid); stroke-width: 1; }
@@ -38,6 +40,7 @@
 <header>
   <h1>Demand curve</h1>
   <span id="window"></span>
+  <span id="action">Action: none</span>
   <label>Sets <select id="field"><option value="multiplier">× multiplier</option><option value="adder">+ req/hr</option></select></label>
   <label>Base <input id="base" type="number" step="any"></label>
   <label>Peak <input id="peak" type="number" step="any"></label>
@@ -220,13 +223,25 @@ function setHover(i) {
   draw();
 }
 // The cursor says what a click does: grab a point, add a point on the curve, or nothing.
+// ...and the action label names it.
+function setAction(text) {
+  const label = $('action');
+  label.textContent = `Action: ${text}`;
+  label.classList.toggle('active', text !== 'none');
+}
 function updateCursor(e) {
-  if (drag != null) { svg.style.cursor = 'grabbing'; return; }
-  if (hover != null) { svg.style.cursor = 'grab'; return; }
+  if (drag != null) { svg.style.cursor = 'grabbing'; setAction('moving point'); return; }
+  if (hover != null) {
+    svg.style.cursor = 'grab';
+    const pinned = hover === 0 || hover === pts.length - 1;
+    setAction(pinned ? 'move point (end, up/down only)' : 'move point · right-click removes');
+    return;
+  }
   const rect = svg.getBoundingClientRect();
   const f = fx(e.clientX - rect.left);
   const onCurve = f > 0 && f < 1 && Math.abs(py(heightAt(f)) - (e.clientY - rect.top)) <= CURVE_HIT_PX;
   svg.style.cursor = onCurve ? 'copy' : 'default';
+  setAction(onCurve ? 'insert point' : 'none');
 }
 
 svg.addEventListener('pointerdown', (e) => {
@@ -262,7 +277,7 @@ svg.addEventListener('pointerup', (e) => {
   updateCursor(e);
   draw();
 });
-svg.addEventListener('pointerleave', () => { if (drag == null) { tip.style.display = 'none'; setHover(null); svg.style.cursor = 'default'; } });
+svg.addEventListener('pointerleave', () => { if (drag == null) { tip.style.display = 'none'; setHover(null); svg.style.cursor = 'default'; setAction('none'); } });
 const removePoint = (i) => { if (i > 0 && i < pts.length - 1) { pts.splice(i, 1); hover = null; draw(); } };
 // A left click on (or near) the curve adds a point on it, which can then be dragged; clicks
 // elsewhere do nothing.
