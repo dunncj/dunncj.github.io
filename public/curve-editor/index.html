@@ -261,10 +261,10 @@ svg.addEventListener('click', (e) => {
   if (e.button !== 0) return;
   if (dragged) { dragged = false; return; }
   const rect = svg.getBoundingClientRect();
-  const f = fx(e.clientX - rect.left); let h = fy(e.clientY - rect.top);
-  if (f <= 0 || f >= 1 || h < 0 || h > 1) return;
-  if (Math.abs(py(heightAt(f)) - (e.clientY - rect.top)) <= 12) h = heightAt(f);
-  pts = sanitize([...pts, [f, h]]);
+  const f = fx(e.clientX - rect.left);
+  if (f <= 0 || f >= 1) return;
+  if (Math.abs(py(heightAt(f)) - (e.clientY - rect.top)) > CURVE_HIT_PX) return;
+  pts = sanitize([...pts, [f, heightAt(f)]]);
   draw();
 });
 // The view is fixed: no scrolling, pinch or ctrl-wheel zoom over the chart.
