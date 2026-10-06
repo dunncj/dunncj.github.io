@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Demand curve editor</title>
 <style>
   :root { --bg: #1e1e1e; --panel: #2a2a2a; --grid: #3a3a3a; --text: #ddd; --muted: #999; --curve: #fff; --accent: #ff8c00; --step: #4f9de0; }
@@ -20,7 +20,7 @@
   .spacer { flex: 1; }
   #window { color: var(--muted); }
   main { flex: 1; min-height: 0; position: relative; }
-  svg { width: 100%; height: 100%; display: block; user-select: none; }
+  svg { width: 100%; height: 100%; display: block; user-select: none; touch-action: none; cursor: crosshair; }
   .gridline { stroke: var(--grid); stroke-width: 1; }
   .axis-label { fill: var(--muted); font-size: 12px; }
   .axis-title { fill: var(--accent); font-size: 12px; font-weight: 600; }
@@ -47,7 +47,7 @@
   <button id="download">⬇ Download CSV</button>
 </header>
 <main><svg id="chart"></svg><div id="tip"></div></main>
-<footer>Drag points to shape demand over the event. Double-click empty space to add a point, double-click (or right-click) a point to remove it. The dashed blue line is what the CSV will contain. Upload the CSV on the event in Garage.</footer>
+<footer>Drag points to shape demand over the event. Click to add a point, drag to move it, right-click a point to remove it. The dashed blue line is what the CSV will contain. Upload the CSV on the event in Garage.</footer>
 <script>
 // Demand curve editor for Garage Planning. Opened from Garage with the event window in the URL:
 //   #start=2026-10-04T18:00&end=2026-10-04T23:00&tz=US/Central[&field=adder&base=0&peak=300&pts=0:0,0.5:1,1:0]
@@ -222,14 +222,17 @@ svg.addEventListener('pointermove', (e) => {
 svg.addEventListener('pointerup', () => { drag = null; draw(); });
 svg.addEventListener('pointerleave', () => { if (drag == null) tip.style.display = 'none'; });
 const removePoint = (i) => { if (i > 0 && i < pts.length - 1) { pts.splice(i, 1); draw(); } };
-svg.addEventListener('dblclick', (e) => {
-  if (e.target.dataset?.i != null) { removePoint(Number(e.target.dataset.i)); return; }
+// Left click on empty space adds a point there (it slots in by time).
+svg.addEventListener('click', (e) => {
+  if (e.button !== 0 || e.target.dataset?.i != null) return;
   const rect = svg.getBoundingClientRect();
   const f = fx(e.clientX - rect.left); const h = fy(e.clientY - rect.top);
   if (f <= 0 || f >= 1 || h < 0 || h > 1) return;
-  pts = sanitize([...pts, [f, h]]); // slots in by time
+  pts = sanitize([...pts, [f, h]]);
   draw();
 });
+// The view is fixed: no scrolling, pinch or ctrl-wheel zoom over the chart.
+svg.addEventListener('wheel', (e) => e.preventDefault(), { passive: false });
 svg.addEventListener('contextmenu', (e) => {
   if (e.target.dataset?.i != null) { e.preventDefault(); removePoint(Number(e.target.dataset.i)); }
 });
