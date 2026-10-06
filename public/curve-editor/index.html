@@ -16,7 +16,7 @@
   input[type=number] { width: 70px; }
   button { font: inherit; border: 0; border-radius: 4px; padding: 7px 12px; cursor: pointer; background: #444; color: var(--text); }
   button:hover { filter: brightness(1.15); }
-  #download { background: var(--accent); color: #111; font-weight: 700; font-size: 14px; padding: 8px 16px; }
+  #copy { background: var(--accent); color: #111; font-weight: 700; font-size: 14px; padding: 8px 16px; min-width: 110px; }
   .spacer { flex: 1; }
   #window { color: var(--muted); }
   main { flex: 1; min-height: 0; position: relative; }
@@ -44,10 +44,11 @@
   <label>Step <select id="step"><option value="15">15 min</option><option value="30">30 min</option><option value="60">1 hour</option></select></label>
   <span class="spacer"></span>
   <button id="reset" title="Back to the default curve">Reset curve</button>
-  <button id="download">⬇ Download CSV</button>
+  <button id="download" title="Save as demand-curve.csv">Download</button>
+  <button id="copy">Copy CSV</button>
 </header>
 <main><svg id="chart"></svg><div id="tip"></div></main>
-<footer>Drag points to shape demand over the event. Click to add a point, drag to move it, right-click a point to remove it. The dashed blue line is what the CSV will contain. Upload the CSV on the event in Garage.</footer>
+<footer>Drag points to shape demand over the event. Click to add a point (on the line to keep the shape), drag to move one, right-click to remove one. The dashed blue line is what the CSV will contain. Copy CSV, then paste it into the event in Garage.</footer>
 <script>
 // Demand curve editor for Garage Planning. Opened from Garage with the event window in the URL:
 //   #start=2026-10-04T18:00&end=2026-10-04T23:00&tz=US/Central[&field=adder&base=0&peak=300&pts=0:0,0.5:1,1:0]
@@ -185,7 +186,7 @@ function draw() {
   el('path', { d: pathOf(stepRows().flatMap((r) => { const h = (r.value - b) / span; return [[px(r.fraction), py(h)], [px(r.end), py(h)]]; })), class: 'steps' });
   // Points; the end points only move up and down.
   pts.forEach(([x, y], i) => {
-    const c = el('circle', { cx: px(x), cy: py(y), r: 7, class: `pt${i === 0 || i === pts.length - 1 ? ' end' : ''}${drag === i ? ' drag' : ''}` });
+    const c = el('circle', { cx: px(x), cy: py(y), r: 7, class: `pt${i === 0 || i === pts.length - 1 ? ' end' : ''}${drag === i || hover === i ? ' drag' : ''}` });
     c.dataset.i = i;
   });
 }
@@ -198,9 +199,34 @@ function showTip(clientX, clientY, f) {
   tip.textContent = `${fmtTime(f)} · ${fmtValue(valueOf(heightAt(f)))}`;
 }
 
+// Points are grabbed (and right-click removed) within GRAB_PX of the pointer, not just on the dot.
+const GRAB_PX = 18;
+let hover = null;
+let dragged = false;
+function nearestPoint(e) {
+  const rect = svg.getBoundingClientRect();
+  const mx = e.clientX - rect.left; const my = e.clientY - rect.top;
+  let best = null; let bestD = GRAB_PX;
+  pts.forEach(([x, y], i) => {
+    const d = Math.hypot(px(x) - mx, py(y) - my);
+    if (d <= bestD) { best = i; bestD = d; }
+  });
+  return best;
+}
+function setHover(i) {
+  if (i === hover) return;
+  hover = i;
+  svg.style.cursor = i == null ? 'crosshair' : 'grab';
+  draw();
+}
+
 svg.addEventListener('pointerdown', (e) => {
-  if (e.target.dataset?.i == null || e.button !== 0) return;
-  drag = Number(e.target.dataset.i);
+  if (e.button !== 0) return;
+  const i = nearestPoint(e);
+  if (i == null) return;
+  drag = i;
+  dragged = true; // the click that follows must not add a point
+  svg.style.cursor = 'grabbing';
   svg.setPointerCapture(e.pointerId);
 });
 svg.addEventListener('pointermove', (e) => {
@@ -213,22 +239,29 @@ svg.addEventListener('pointermove', (e) => {
     pts[drag] = [x, Math.min(1, Math.max(0, fy(e.clientY - rect.top)))];
     draw();
     showTip(e.clientX, e.clientY, x);
-  } else if (e.clientX - rect.left >= M.l && e.clientX - rect.left <= W - M.r) {
-    showTip(e.clientX, e.clientY, f);
-  } else {
-    tip.style.display = 'none';
+    return;
   }
+  setHover(nearestPoint(e));
+  if (e.clientX - rect.left >= M.l && e.clientX - rect.left <= W - M.r) showTip(e.clientX, e.clientY, hover == null ? f : pts[hover][0]);
+  else tip.style.display = 'none';
 });
-svg.addEventListener('pointerup', () => { drag = null; draw(); });
-svg.addEventListener('pointerleave', () => { if (drag == null) tip.style.display = 'none'; });
-const removePoint = (i) => { if (i > 0 && i < pts.length - 1) { pts.splice(i, 1); draw(); } };
-// Left click on empty space adds a point there (it slots in by time).
+svg.addEventListener('pointerup', (e) => {
+  if (drag == null) return;
+  drag = null;
+  svg.style.cursor = 'grab';
+  setHover(nearestPoint(e));
+  draw();
+});
+svg.addEventListener('pointerleave', () => { if (drag == null) { tip.style.display = 'none'; setHover(null); } });
+const removePoint = (i) => { if (i > 0 && i < pts.length - 1) { pts.splice(i, 1); hover = null; draw(); } };
+// Left click on empty space adds a point there (it slots in by time); on or near the line it
+// lands on the line, so the shape doesn't change.
 svg.addEventListener('click', (e) => {
-  if (e.button !== 0 || e.target.dataset?.i != null) return;
+  if (e.button !== 0) return;
+  if (dragged) { dragged = false; return; }
   const rect = svg.getBoundingClientRect();
   const f = fx(e.clientX - rect.left); let h = fy(e.clientY - rect.top);
   if (f <= 0 || f >= 1 || h < 0 || h > 1) return;
-  // A click on (or near) the line adds the point on the line, so the shape doesn't change.
   if (Math.abs(py(heightAt(f)) - (e.clientY - rect.top)) <= 12) h = heightAt(f);
   pts = sanitize([...pts, [f, h]]);
   draw();
@@ -236,14 +269,22 @@ svg.addEventListener('click', (e) => {
 // The view is fixed: no scrolling, pinch or ctrl-wheel zoom over the chart.
 svg.addEventListener('wheel', (e) => e.preventDefault(), { passive: false });
 svg.addEventListener('contextmenu', (e) => {
-  if (e.target.dataset?.i != null) { e.preventDefault(); removePoint(Number(e.target.dataset.i)); }
+  e.preventDefault();
+  const i = nearestPoint(e);
+  if (i != null) removePoint(i);
 });
 
 $('reset').addEventListener('click', () => { pts = DEFAULT_PTS.map((p) => [...p]); draw(); });
+const csvText = () => `${['fraction,multiplier,adder', ...stepRows().map((r) => (fieldEl.value === 'multiplier' ? `${r.fraction},${r.value},0` : `${r.fraction},1,${r.value}`))].join('\n')}\n`;
+$('copy').addEventListener('click', () => {
+  navigator.clipboard.writeText(csvText()).then(() => {
+    $('copy').textContent = 'Copied ✓';
+    setTimeout(() => { $('copy').textContent = 'Copy CSV'; }, 1500);
+  });
+});
 $('download').addEventListener('click', () => {
-  const rows = ['fraction,multiplier,adder', ...stepRows().map((r) => (fieldEl.value === 'multiplier' ? `${r.fraction},${r.value},0` : `${r.fraction},1,${r.value}`))];
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([`${rows.join('\n')}\n`], { type: 'text/csv' }));
+  a.href = URL.createObjectURL(new Blob([csvText()], { type: 'text/csv' }));
   a.download = 'demand-curve.csv';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 100);
