@@ -20,7 +20,7 @@
   .spacer { flex: 1; }
   #window { color: var(--muted); }
   main { flex: 1; min-height: 0; position: relative; }
-  svg { width: 100%; height: 100%; display: block; user-select: none; touch-action: none; cursor: crosshair; }
+  svg { width: 100%; height: 100%; display: block; user-select: none; touch-action: none; cursor: default; }
   .gridline { stroke: var(--grid); stroke-width: 1; }
   .axis-label { fill: var(--muted); font-size: 12px; }
   .axis-title { fill: var(--accent); font-size: 12px; font-weight: 600; }
@@ -217,8 +217,16 @@ function nearestPoint(e) {
 function setHover(i) {
   if (i === hover) return;
   hover = i;
-  svg.style.cursor = i == null ? 'crosshair' : 'grab';
   draw();
+}
+// The cursor says what a click does: grab a point, add a point on the curve, or nothing.
+function updateCursor(e) {
+  if (drag != null) { svg.style.cursor = 'grabbing'; return; }
+  if (hover != null) { svg.style.cursor = 'grab'; return; }
+  const rect = svg.getBoundingClientRect();
+  const f = fx(e.clientX - rect.left);
+  const onCurve = f > 0 && f < 1 && Math.abs(py(heightAt(f)) - (e.clientY - rect.top)) <= CURVE_HIT_PX;
+  svg.style.cursor = onCurve ? 'copy' : 'default';
 }
 
 svg.addEventListener('pointerdown', (e) => {
@@ -243,17 +251,18 @@ svg.addEventListener('pointermove', (e) => {
     return;
   }
   setHover(nearestPoint(e));
+  updateCursor(e);
   if (e.clientX - rect.left >= M.l && e.clientX - rect.left <= W - M.r) showTip(e.clientX, e.clientY, hover == null ? f : pts[hover][0]);
   else tip.style.display = 'none';
 });
 svg.addEventListener('pointerup', (e) => {
   if (drag == null) return;
   drag = null;
-  svg.style.cursor = 'grab';
   setHover(nearestPoint(e));
+  updateCursor(e);
   draw();
 });
-svg.addEventListener('pointerleave', () => { if (drag == null) { tip.style.display = 'none'; setHover(null); } });
+svg.addEventListener('pointerleave', () => { if (drag == null) { tip.style.display = 'none'; setHover(null); svg.style.cursor = 'default'; } });
 const removePoint = (i) => { if (i > 0 && i < pts.length - 1) { pts.splice(i, 1); hover = null; draw(); } };
 // A left click on (or near) the curve adds a point on it, which can then be dragged; clicks
 // elsewhere do nothing.
